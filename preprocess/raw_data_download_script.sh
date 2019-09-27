@@ -19,6 +19,7 @@ if [ $1 == 'GM12878' ]
 then
 	start_idx=1
 	end_idx=18
+	idx=$2
 elif [ $1 == 'K562' ]
 then
 	start_idx=69
@@ -36,13 +37,12 @@ else
 	exit
 fi
 
-for ((idx=$start_idx; idx<=$end_idx; idx++))
-do
-	number=$(expr $idx + 549)
-	wget -P "$DPATH/$1" ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM1551nnn/GSM1551`printf "%03d" $number`/suppl/GSM1551`printf "%03d" $number`_HIC`printf "%03d" $idx`_merged_nodups.txt.gz
-done
+#for ((idx=$start_idx; idx<=$end_idx; idx++))
+#do
+#	number=$(expr $idx + 549)
+#	wget -P "$DPATH/$1" ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM1551nnn/GSM1551`printf "%03d" $number`/suppl/GSM1551`printf "%03d" $number`_HIC`printf "%03d" $idx`_merged_nodups.txt.gz
+#done
 
-
-
-
+number=$(expr $idx + 549)
+wget -P "$DPATH/$1" ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM1551nnn/GSM1551`printf "%03d" $number`/suppl/GSM1551`printf "%03d" $number`_HIC`printf "%03d" $idx`_merged_nodups.txt.gz
 

@@ -1,12 +1,15 @@
 #!/bin/bash
+
+#SBATCH --job-name=hicgan_preprocess
+#SBATCH -p general
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
 #SBATCH --time=72:00:00
-#SBATCH -n 1
-#SBATCH -N 1
-#SBATCH --mem=10000
-#SBATCH --error=./hic_juicer_error.txt
-#SBATCH --output=./hic_juicer_output.txt
-
-
+#SBATCH --mem=55GB
+#SBATCH --output=/proj/yunligrp/users/minzhi/output_error/deephp/%x_%A_%a.out
+#SBATCH --error=/proj/yunligrp/users/minzhi/output_error/deephp/%x_%A_%a.err
+#SBATCH --mail-type=END,ALL
+#SBATCH --mail-user=minzhi.hpc.status@gmail.com # send-to address
 
 ratio=16
 chrom=$1
