@@ -21,17 +21,19 @@ OPTIONS:
     <graph> -- path to save event file for TensorBoard visualization
     <CELL> -- selected cell type
 '''
-if len(sys.argv)!=7:
+seed = 100
+tf.set_random_seed(seed)
+if len(sys.argv)!=8:
     print(usage)
     sys.exit(1)
 #GPU setting and Global parameters
 os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
 #checkpoint = "checkpoint"
-checkpoint = sys.argv[2]
-graph_dir = sys.argv[3]
+checkpoint_name = sys.argv[2]
+graph_name = sys.argv[3]
 tl.global_flag['mode']='hicgan'
-tl.files.exists_or_mkdir(checkpoint)
-tl.files.exists_or_mkdir(graph_dir)
+#tl.files.exists_or_mkdir(checkpoint)
+#tl.files.exists_or_mkdir(graph_dir)
 batch_size = 128
 lr_init = 1e-4
 cell_type = sys.argv[4]
@@ -42,8 +44,25 @@ n_epoch = 500
 lr_decay = 0.1
 decay_every = int(n_epoch / 2)
 ni = int(np.sqrt(batch_size))
-test_chr = int(sys.argv[5])
-test_size = int(sys.argv[6])
+
+train_chr_input = sys.argv[5]
+train_chr_list = list(map(int, train_chr_input.split(",")))
+test_chr_input = sys.argv[6]
+test_chr_list = list(map(int, test_chr_input.split(",")))
+turn = int(sys.argv[7])
+
+train_chr_list_str = list(map(str, train_chr_list))
+test_chr_list_str = list(map(str, test_chr_list))
+train_test_list = ["-".join(train_chr_list_str), "-".join(test_chr_list_str)]
+case_dir = "_".join(train_test_list)
+cell_dir = os.path.join(cell_type, case_dir)
+checkpoint = os.path.join("..", "data", cell_type, checkpoint_name, "%s_%d"%(case_dir, turn))
+graph_dir = os.path.join("..", "data", cell_type, graph_name, "%s_%d"%(case_dir, turn))
+
+if not os.path.exists(checkpoint):
+    os.makedirs(checkpoint)
+if not os.path.exists(graph_dir):
+    os.makedirs(graph_dir)
 
 def calculate_psnr(mat1,mat2):
     data_range=np.max(mat1)-np.min(mat1)
@@ -150,7 +169,7 @@ def training_data_split(train_chrom_list):
 #load training data
 #lr_mats_train_full,hr_mats_train_full = hkl.load('data/%s/train_data_full.hkl'%cell_type)
 
-lr_mats_train_full,hr_mats_train_full = hkl.load('data/%s/train_data_%d-%d.hkl'%(cell_type, test_chr, test_size))
+lr_mats_train_full,hr_mats_train_full = hkl.load('../data/%s/train_data.hkl'%cell_dir)
 
 lr_mats_train = lr_mats_train_full[:int(0.95*len(lr_mats_train_full))]
 hr_mats_train = hr_mats_train_full[:int(0.95*len(hr_mats_train_full))]
@@ -352,8 +371,8 @@ for epoch in range(0, n_epoch + 1):
         wait=0
         best_mse_val = mse_val
         #save the model with minimal MSE in validation samples
-        tl.files.save_npz(net_g.all_params, name=checkpoint + '/g_{}_{}_{}-{}_best.npz'.format(tl.global_flag['mode'],epoch, test_chr, test_size), sess=sess)
-        tl.files.save_npz(net_d.all_params, name=checkpoint + '/d_{}_{}_{}-{}_best.npz'.format(tl.global_flag['mode'],epoch, test_chr, test_size), sess=sess)
+        tl.files.save_npz(net_g.all_params, name=checkpoint + '/g_{}_{}_best.npz'.format(tl.global_flag['mode'],epoch), sess=sess)
+        tl.files.save_npz(net_d.all_params, name=checkpoint + '/d_{}_{}_best.npz'.format(tl.global_flag['mode'],epoch), sess=sess)
     else:
         wait+=1
         if wait >= patience:
@@ -376,8 +395,8 @@ for epoch in range(0, n_epoch + 1):
 
     ## save model every 5 epochs
     if (epoch <=5) or ((epoch != 0) and (epoch % 5 == 0)):
-        tl.files.save_npz(net_g.all_params, name=checkpoint + '/g_{}_{}_{}-{}.npz'.format(tl.global_flag['mode'],epoch, test_chr, test_size), sess=sess)
-        tl.files.save_npz(net_d.all_params, name=checkpoint + '/d_{}_{}_{}-{}.npz'.format(tl.global_flag['mode'],epoch, test_chr, test_size), sess=sess)
+        tl.files.save_npz(net_g.all_params, name=checkpoint + '/g_{}_{}.npz'.format(tl.global_flag['mode'],epoch), sess=sess)
+        tl.files.save_npz(net_d.all_params, name=checkpoint + '/d_{}_{}.npz'.format(tl.global_flag['mode'],epoch), sess=sess)
 
 
 

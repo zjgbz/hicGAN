@@ -2,14 +2,61 @@ import os, time, pickle, sys, math,random
 import numpy as np
 import hickle as hkl
 
-def hic_matrix_extraction(DPATH, chrom_list, res=10000,norm_method='NONE'):
+chrom_list = list(range(1, 23))
+cell=sys.argv[1]
+
+train_chr_input = sys.argv[2]
+train_chr_list = list(map(int, train_chr_input.split(",")))
+test_chr_input = sys.argv[3]
+test_chr_list = list(map(int, test_chr_input.split(",")))
+
+train_chr_list_str = list(map(str, train_chr_list))
+test_chr_list_str = list(map(str, test_chr_list))
+train_test_list = ["-".join(train_chr_list_str), "-".join(test_chr_list_str)]
+case_dir = "_".join(train_test_list)
+cell_dir = os.path.join(cell, case_dir)
+
+hr_dir = os.path.join(os.sep, "proj", "yunligrp", "users", "gangli", "HiC_HP", "code", "DeepHiC", "data", "mat", "GM12878_combined")
+print(hr_dir)
+lr_dir = hr_dir
+chrom_dict = {}
+for chrom in chrom_list:
+    hr_filename = "chr%d_10kb.npz"%chrom
+    lr_filename = "chr%d_40kb.npz"%chrom
+    chrom_dict[chrom] = [hr_filename, lr_filename]
+
+npz_key = "hic"
+
+#test_chr_start = int(sys.argv[2])
+#test_size = int(sys.argv[3])
+#test_chr_list = list(range(test_chr_start, test_chr_start + test_size))
+#train_chr_list = list(range(1, 20))
+#chrom_list = list(range(1, 20))
+#for test_chr in test_chr_list:
+#    train_chr_list.remove(test_chr)
+#print(test_chr_list)
+#print(train_chr_list)
+#if not os.path.exists('../original_data_sym/%s'%cell):
+#    print('Data path wrong,please input the right data path.')
+#    sys.exit()
+
+def load_nptype(dir_filename, npz_key = None):
+    extension = dir_filename.split(".")[-1]
+    if extension == "npz":
+        np_obj = np.load(dir_filename)
+        matrix = np_obj[npz_key]
+    elif extension == "npy":
+        matrix = np.load(dir_filename)
+    return matrix
+
+def hic_matrix_extraction(DPATH, chrom_dict, hr_dir, lr_dir, npz_key, res=10000,norm_method='NONE'):
     hr_contacts_dict={}
     lr_contacts_dict={}
-    for each in chrom_list:
-        hr_hic_file = '../binary_data/float32/contact_matrix/MY_113.MY_115/MY_113.MY_115.%d.npy'%each
-        lr_hic_file = '../binary_data/float32/contact_matrix/MY_113.MY_115_simulation1_seed1558030855_frac125/MY_113.MY_115_simulation1_seed1558030855_frac125.%d.npy'%each
-        hr_contact_matrix = np.load(hr_hic_file)
-        lr_contact_matrix = np.load(lr_hic_file)
+    for each in chrom_dict:
+        hr_hic_file = os.path.join(hr_dir, chrom_dict[each][0])
+        lr_hic_file = os.path.join(hr_dir, chrom_dict[each][1])
+        hr_contact_matrix = load_nptype(hr_hic_file, npz_key)
+        lr_contact_matrix = load_nptype(lr_hic_file, npz_key)
         hr_contacts_dict['chr%d'%each] = hr_contact_matrix
         lr_contacts_dict['chr%d'%each] = lr_contact_matrix
 
@@ -17,6 +64,29 @@ def hic_matrix_extraction(DPATH, chrom_list, res=10000,norm_method='NONE'):
     nb_lr_contacts={item:sum(sum(lr_contacts_dict[item])) for item in lr_contacts_dict.keys()}
     
     return hr_contacts_dict,lr_contacts_dict,nb_hr_contacts,nb_lr_contacts
+
+hr_contacts_dict,lr_contacts_dict,nb_hr_contacts,nb_lr_contacts = hic_matrix_extraction(cell_dir, chrom_dict, hr_dir, lr_dir, npz_key)
+print("extraction completed.")
+
+max_hr_contact = max([nb_hr_contacts[item] for item in nb_hr_contacts.keys()])
+max_lr_contact = max([nb_lr_contacts[item] for item in nb_lr_contacts.keys()])
+
+#normalization
+hr_contacts_norm_dict = {item:np.log2(hr_contacts_dict[item]*max_hr_contact/sum(sum(hr_contacts_dict[item]))+1) for item in hr_contacts_dict.keys()}
+lr_contacts_norm_dict = {item:np.log2(lr_contacts_dict[item]*max_lr_contact/sum(sum(lr_contacts_dict[item]))+1) for item in lr_contacts_dict.keys()}
+
+max_hr_contact_norm={item:hr_contacts_norm_dict[item].max() for item in hr_contacts_dict.keys()}
+max_lr_contact_norm={item:lr_contacts_norm_dict[item].max() for item in lr_contacts_dict.keys()}
+
+if not os.path.exists('../data/%s'%cell_dir):
+    os.makedirs('../data/%s'%cell_dir)
+
+hkl.dump(nb_hr_contacts,'../data/%s/nb_hr_contacts.hkl'%cell_dir)
+hkl.dump(nb_lr_contacts,'../data/%s/nb_lr_contacts.hkl'%cell_dir)
+
+hkl.dump(max_hr_contact_norm,'../data/%s/max_hr_contact_norm.hkl'%cell_dir)
+hkl.dump(max_lr_contact_norm,'../data/%s/max_lr_contact_norm.hkl'%cell_dir)
+print("save completed.")
 
 def crop_hic_matrix_by_chrom(chrom,norm_type=0,size=40 ,thred=200):
     #thred=2M/resolution
@@ -86,55 +156,8 @@ def data_split(chrom_list,norm_type):
     lr_mats=lr_mats.transpose((0,2,3,1))
     return hr_mats,lr_mats,distance_all
 
-def main():
-    cell=sys.argv[1]
-    test_chr_start = int(sys.argv[2])
-    test_size = int(sys.argv[3])
-    test_chr_list = list(range(test_chr_start, test_chr_start + test_size))
-    train_chr_list = list(range(1, 20))
-    for test_chr in test_chr_list:
-        train_chr_list.remove(test_chr)
-    
-
-    nb_hr_contacts_dir_filename = 'data/%s/nb_hr_contacts.hkl'%cell
-    nb_lr_contacts_dir_filename = 'data/%s/nb_lr_contacts.hkl'%cell
-    max_hr_contact_norm_dir_filename = 'data/%s/max_hr_contact_norm.hkl'%cell
-    max_lr_contact_norm_dir_filename = 'data/%s/max_lr_contact_norm.hkl'%cell
-    chrom_list = list(range(1, 20))
-    if (not os.path.exists(nb_hr_contacts_dir_filename)) or (not os.path.exists(nb_lr_contacts_dir_filename)) or (not os.path.exists(max_hr_contact_norm_dir_filename)) or (not os.path.exists(max_lr_contact_norm_dir_filename)):
-        # data extraction
-        hr_contacts_dict,lr_contacts_dict,nb_hr_contacts,nb_lr_contacts = hic_matrix_extraction(cell, chrom_list)
-        print("extraction completed.")
-
-        max_hr_contact = max([nb_hr_contacts[item] for item in nb_hr_contacts.keys()])
-        max_lr_contact = max([nb_lr_contacts[item] for item in nb_lr_contacts.keys()])
-
-        #normalization
-        hr_contacts_norm_dict = {item:np.log2(hr_contacts_dict[item]*max_hr_contact/sum(sum(hr_contacts_dict[item]))+1) for item in hr_contacts_dict.keys()}
-        lr_contacts_norm_dict = {item:np.log2(lr_contacts_dict[item]*max_lr_contact/sum(sum(lr_contacts_dict[item]))+1) for item in lr_contacts_dict.keys()}
-
-        max_hr_contact_norm={item:hr_contacts_norm_dict[item].max() for item in hr_contacts_dict.keys()}
-        max_lr_contact_norm={item:lr_contacts_norm_dict[item].max() for item in lr_contacts_dict.keys()}
-
-        hkl.dump(nb_hr_contacts,'data/%s/nb_hr_contacts.hkl'%cell)
-        hkl.dump(nb_lr_contacts,'data/%s/nb_lr_contacts.hkl'%cell)
-
-        hkl.dump(max_hr_contact_norm,'data/%s/max_hr_contact_norm.hkl'%cell)
-        hkl.dump(max_lr_contact_norm,'data/%s/max_lr_contact_norm.hkl'%cell)
-        print("save completed.")
-
-    #hr_mats_train,lr_mats_train,distance_train = data_split(['chr%d'%idx for idx in list(range(1,16))],norm_type=2)
-    #hr_mats_test,lr_mats_test,distance_test = data_split(['chr%d'%idx for idx in list(range(16,20))],norm_type=2)
-    hr_mats_train,lr_mats_train,distance_train = data_split(['chr%d'%idx for idx in train_chr_list],norm_type=2)
-    hr_mats_test,lr_mats_test,distance_test = data_split(['chr%d'%idx for idx in test_chr_list],norm_type=2)
-    print("split completed.")
-    hkl.dump([lr_mats_train,hr_mats_train],'data/%s/train_data_%d-%d.hkl'%(cell, test_chr_start, test_size))
-    hkl.dump([lr_mats_test,hr_mats_test,distance_test],'data/%s/test_data_%d-%d.hkl'%(cell, test_chr_start, test_size))
-
-    #hr_mats_train,lr_mats_train,distance_train = data_split(['chr%d'%idx for idx in list(range(19,20))],norm_type=2)
-    #hr_mats_test,lr_mats_test,distance_test = data_split(['chr%d'%idx for idx in list(range(19,20))],norm_type=2)
-    #hkl.dump([lr_mats_train,hr_mats_train],'data/%s/train_data.hkl'%cell)
-    #hkl.dump([lr_mats_test,hr_mats_test],'data/%s/test_data.hkl'%cell)
-
-if __name__ == '__main__':
-	main()
+hr_mats_train,lr_mats_train,distance_train = data_split(['chr%d'%idx for idx in train_chr_list],norm_type=2)
+hr_mats_test,lr_mats_test,distance_test = data_split(['chr%d'%idx for idx in test_chr_list],norm_type=2)
+print("split completed.")
+hkl.dump([lr_mats_train,hr_mats_train],'../data/%s/train_data.hkl'%cell_dir)
+hkl.dump([lr_mats_test,hr_mats_test,distance_test],'../data/%s/test_data.hkl'%cell_dir)

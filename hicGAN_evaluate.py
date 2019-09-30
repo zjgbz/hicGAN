@@ -35,18 +35,34 @@ Usage: python hicGAN_evaluate.py [GPU_ID] [PATH-TO-MODEL] [CELL]
 [PATH-TO-MODEL]: weights file for hicGAN_g(e.g. hicGAN_g_best.npz)
 [CELL]: selected cell type (e.g. GM12878)
 '''
-if len(sys.argv)!=6:
+if len(sys.argv)!=7:
     print usage
     sys.exit(1)
 
 os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
-directory = sys.argv[2]
-_, generator_idx_list, _, generator_selected_list = extract_best_generator(directory)
+generator_name = sys.argv[2]
 #model_path=sys.argv[2].rstrip('/')
 #model_path = generator_selected.rstrip('/')
 cell=sys.argv[3]
-test_chr = int(sys.argv[4])
-test_size = int(sys.argv[5])
+train_chr_input = sys.argv[4]
+train_chr_list = list(map(int, train_chr_input.split(",")))
+test_chr_input = sys.argv[5]
+test_chr_list = list(map(int, test_chr_input.split(",")))
+turn = int(sys.argv[6])
+
+train_chr_list_str = list(map(str, train_chr_list))
+test_chr_list_str = list(map(str, test_chr_list))
+train_test_list = ["-".join(train_chr_list_str), "-".join(test_chr_list_str)]
+case_dir = "_".join(train_test_list)
+
+data_dir = os.path.join("..", "data", cell, case_dir)
+generator_dir = os.path.join("..", "data", cell, generator_name, "%s_%d"%(case_dir, turn))
+evaluation_dir = os.path.join("..", "data", cell, "evaluation_%s"%generator_name, "%s_%d"%(case_dir, turn))
+
+if not os.path.exists(evaluation_dir):
+    os.makedirs(evaluation_dir)
+
+_, generator_idx_list, _, generator_selected_list = extract_best_generator(generator_dir)
 
 def calculate_psnr(mat1,mat2):
     data_range=np.max(mat1)-np.min(mat1)
@@ -85,6 +101,8 @@ def hicGAN_g(t_image, is_train=False, reuse=False):
 t_image = tf.placeholder('float32', [None, None, None, 1], name='image_input')
 net_g = hicGAN_g(t_image, is_train=False, reuse=False)   
 
+test_data_dir_filename = os.path.join(data_dir, "test_data.hkl")
+lr_mats_test,hr_mats_test,_=hkl.load(test_data_dir_filename)
 for generator_selected, generator_idx in zip(generator_selected_list, generator_idx_list):
     model_path = generator_selected.rstrip('/')
     def hicGAN_predict(batch=64):
@@ -96,12 +114,13 @@ for generator_selected, generator_idx in zip(generator_selected_list, generator_
             out[batch*i:batch*(i+1)] = sess.run(net_g.outputs, {t_image: lr_mats_test[batch*i:batch*(i+1)]})
         out[batch*(i+1):] = sess.run(net_g.outputs, {t_image: lr_mats_test[batch*(i+1):]})
         return out
-    #Comment the following line and constuct lr_mats_test,hr_mats_test by your own if you want to using custom data.
-    lr_mats_test,hr_mats_test,_=hkl.load('data/%s/test_data_%d-%d.hkl'%(cell, test_chr, test_size))
+#    #Comment the following line and constuct lr_mats_test,hr_mats_test by your own if you want to using custom data.
+#    lr_mats_test,hr_mats_test,_=hkl.load('../data/%s/test_data.hkl'%cell)
 
     sr_mats_pre = hicGAN_predict(64)
     print(generator_idx)
-    np.save('data/%s/%s/hicGAN_predicted_%d_%d-%d'%(cell, directory.split("/")[0], int(generator_idx), test_chr, test_size),sr_mats_pre)
+    pre_dir_filename = os.path.join(evaluation_dir, "hicGAN_predicted_%d"%(int(generator_idx)))
+    np.save(pre_dir_filename, sr_mats_pre)
     
     mse_hicGAN_norm=map(compare_mse,hr_mats_test[:,:,:,0],sr_mats_pre[:,:,:,0])
     psnr_hicGAN_norm=map(calculate_psnr,hr_mats_test[:,:,:,0],sr_mats_pre[:,:,:,0])
